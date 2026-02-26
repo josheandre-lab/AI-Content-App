@@ -1,0 +1,105 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
+import '../models/models.dart';
+
+class ExportHelper {
+  static Future<String?> exportToJson(ContentDetail detail, String title) async {
+    try {
+      final exportData = {
+        'exportedAt': DateTime.now().toIso8601String(),
+        'title': title,
+        'content': {
+          'hooks': detail.hooks,
+          'titles': detail.titles,
+          'script': {
+            'intro': detail.script.intro,
+            'problem': detail.script.problem,
+            'solution': detail.script.solution,
+            'example': detail.script.example,
+            'cta': detail.script.cta,
+            'fullScript': detail.script.fullScript,
+            'wordCount': detail.script.wordCount,
+          },
+          'description': detail.description,
+          'hashtags': detail.hashtags,
+        },
+      };
+
+      final jsonString = const JsonEncoder.withIndent('  ').convert(exportData);
+      
+      // Get temp directory
+      final tempDir = await getTemporaryDirectory();
+      final fileName = 'content_${_sanitizeFileName(title)}_${DateTime.now().millisecondsSinceEpoch}.json';
+      final filePath = '${tempDir.path}/$fileName';
+      
+      final file = File(filePath);
+      await file.writeAsString(jsonString);
+      
+      // Share the file
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: 'Content Export: $title',
+      );
+      
+      return filePath;
+    } catch (e) {
+      debugPrint('Error exporting to JSON: $e');
+      return null;
+    }
+  }
+
+  static Future<String?> exportHistoryToJson(List<HistoryItemDisplay> items) async {
+    try {
+      final exportData = {
+        'exportedAt': DateTime.now().toIso8601String(),
+        'totalItems': items.length,
+        'items': items.map((item) => {
+          'id': item.id,
+          'createdAt': item.createdAt.toIso8601String(),
+          'title': item.displayTitle,
+          'request': {
+            'platform': item.request.platform.value,
+            'niche': item.request.niche,
+            'audience': item.request.audience,
+            'duration': item.request.duration.displayName,
+            'tone': item.request.tone.value,
+            'goal': item.request.goal.value,
+            'topic': item.request.topic,
+          },
+          'hasDetail': item.detail != null,
+        }).toList(),
+      };
+
+      final jsonString = const JsonEncoder.withIndent('  ').convert(exportData);
+      
+      final tempDir = await getTemporaryDirectory();
+      final fileName = 'history_export_${DateTime.now().millisecondsSinceEpoch}.json';
+      final filePath = '${tempDir.path}/$fileName';
+      
+      final file = File(filePath);
+      await file.writeAsString(jsonString);
+      
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: 'History Export (${items.length} items)',
+      );
+      
+      return filePath;
+    } catch (e) {
+      debugPrint('Error exporting history: $e');
+      return null;
+    }
+  }
+
+  static String _sanitizeFileName(String input) {
+    return input
+        .replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), '')
+        .replaceAll(RegExp(r'\s+'), '_')
+        .toLowerCase()
+        .substring(0, input.length.clamp(0, 30));
+  }
+}
